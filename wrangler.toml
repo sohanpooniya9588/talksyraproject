@@ -1,9 +1,9 @@
-name = "talksyra-r2-uploader"
+name = "talksyraproject"
 main = "src/worker.js"
 compatibility_date = "2026-05-18"
 
 # Replace the placeholders below with your Cloudflare account values.
-account_id = "YOUR_ACCOUNT_ID"
+account_id = "31aa75dfcffb9df514a8b25f3dafca53"
 
 [vars]
 # Optionally override the default secret here instead of hardcoding in clients
