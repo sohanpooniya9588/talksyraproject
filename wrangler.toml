@@ -1,0 +1,15 @@
+name = "talksyra-r2-uploader"
+main = "src/worker.js"
+compatibility_date = "2026-05-18"
+
+# Replace the placeholders below with your Cloudflare account values.
+account_id = "YOUR_ACCOUNT_ID"
+
+[vars]
+# Optionally override the default secret here instead of hardcoding in clients
+SECRET_KEY = "TalkSyra_Secret_Key_2024"
+
+[[r2_buckets]]
+binding = "talksyra"
+bucket_name = "talksyra"
+preview_bucket_name = "talksyra"
