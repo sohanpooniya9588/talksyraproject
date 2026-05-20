@@ -240,7 +240,8 @@ export default {
         const query = `${SB_URL}/rest/v1/hashtags?order=usage_count.desc&limit=${limit}`;
         const res = await fetch(query, { headers });
         const tags = await res.json();
-        
+        if (!Array.isArray(tags)) return errorResponse(res.statusText || tags.message || JSON.stringify(tags), 500);
+
         // Add trend indicator
         const enriched = tags.map(tag => ({
           ...tag,
