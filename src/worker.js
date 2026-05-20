@@ -1,73 +1,77 @@
+// TalkSyra High-Performance Feed Worker
 export default {
   async fetch(request, env) {
-    const CORS_HEADERS = {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+    const url = new URL(request.url);
+    const path = url.pathname;
+    
+    // Supabase Config (Worker Settings -> Variables mein add karein)
+    const SB_URL = env.SUPABASE_URL || "https://frmazzmzyychdfajnslt.supabase.co";
+    const SB_KEY = env.SUPABASE_ANON_KEY; 
+
+    const headers = {
+      'apikey': SB_KEY,
+      'Authorization': `Bearer ${SB_KEY}`,
+      'Content-Type': 'application/json'
     };
 
-    if (request.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: CORS_HEADERS });
-    }
+    try {
+      // 1. HOME & REELS FEED (/api/feed)
+      if (path === '/api/feed') {
+        const type = url.searchParams.get('type') || 'post';
+        const userId = url.searchParams.get('userId');
+        const limit = url.searchParams.get('limit') || 20;
 
-    // 1. Security Check (Authorization)
-    const authKey = request.headers.get('Authorization');
-    if (authKey !== (env.SECRET_KEY || 'TalkSyra_Secret_Key_2024')) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-        headers: Object.assign({ 'Content-Type': 'application/json' }, CORS_HEADERS),
-      });
-    }
+        // Fetch Posts with Author details
+        const postQuery = `${SB_URL}/rest/v1/posts?select=*,author:users(username,full_name,profile_pic)&type=eq.${type}&order=created_at.desc&limit=${limit}`;
+        const postRes = await fetch(postQuery, { headers });
+        let posts = await postRes.json();
 
-    // 2. Sirf POST requests allow karein
-    if (request.method === 'POST') {
-      try {
-        const formData = await request.formData();
-        const file = formData.get('file');
-        const folder = formData.get('folder') || 'others';
-        
-        if (!file || !file.name) {
-          return new Response(JSON.stringify({ error: 'No file uploaded' }), {
-            status: 400,
-            headers: Object.assign({ 'Content-Type': 'application/json' }, CORS_HEADERS),
-          });
+        // Check Like Status if User is logged in
+        if (userId && posts.length > 0) {
+          const postIds = posts.map(p => p.id);
+          const likesQuery = `${SB_URL}/rest/v1/likes?select=post_id&user_id=eq.${userId}&post_id=in.(${postIds.join(',')})`;
+          const likesRes = await fetch(likesQuery, { headers });
+          const likedData = await likesRes.json();
+          const likedIds = new Set(likedData.map(l => l.post_id));
+
+          posts = posts.map(p => ({
+            ...p,
+            is_liked: likedIds.has(p.id) ? [{ user_id: userId }] : []
+          }));
         }
-
-        // --- UNIQUE FILENAME LOGIC ---
-        const timestamp = Date.now();
-        const uniqueId = crypto.randomUUID().split('-')[0]; // Short UUID suffix
-        const cleanFileName = file.name.replace(/\s+/g, '_'); // Spaces ko underscore se replace
-        
-        // Final Path: folder/uuid_timestamp_filename.ext
-        const filePath = `${folder}/${uniqueId}_${timestamp}_${cleanFileName}`;
-
-        // 3. R2 Bucket (talksyra) mein upload karna
-        // Ensure your bucket binding in Cloudflare is named 'talksyra'
-        const contentType = file.type || 'application/vnd.android.package-archive';
-        await env.talksyra.put(filePath, file.stream(), {
-          httpMetadata: { contentType },
-        });
-
-        // 4. Custom Domain URL generate karna
-        const publicUrl = `https://api.talksyra.app/${filePath}`;
-        
-        return new Response(JSON.stringify({ 
-          success: true,
-          url: publicUrl,
-          fileName: filePath 
-        }), {
-          status: 200,
-          headers: Object.assign({ 'Content-Type': 'application/json' }, CORS_HEADERS),
-        });
-
-      } catch (e) {
-        return new Response(JSON.stringify({ error: 'Worker Error', message: e.message }), {
-          status: 500,
-          headers: Object.assign({ 'Content-Type': 'application/json' }, CORS_HEADERS),
-        });
+        return jsonResponse(posts);
       }
-    }
 
-    return new Response('TalkSyra API Worker is Active', { headers: CORS_HEADERS });
-  },
+      // 2. RISING STARS (/api/stars)
+      if (path === '/api/stars') {
+        const query = `${SB_URL}/rest/v1/users?select=id,username,full_name,profile_pic,follower_count&order=follower_count.desc&limit=10`;
+        const res = await fetch(query, { headers });
+        return jsonResponse(await res.json());
+      }
+
+      // 3. TRENDING CONTENT (/api/trending)
+      if (path === '/api/trending') {
+        const type = url.searchParams.get('type') || 'post';
+        const query = `${SB_URL}/rest/v1/posts?select=*,author:users(username,full_name,profile_pic)&type=eq.${type}&order=like_count.desc&limit=15`;
+        const res = await fetch(query, { headers });
+        return jsonResponse(await res.json());
+      }
+
+      return new Response("TalkSyra Worker API is running", { status: 200 });
+
+    } catch (err) {
+      return new Response(JSON.stringify({ error: err.message }), { status: 500 });
+    }
+  }
 };
+
+// CORS aur Caching handle karne ke liye helper
+function jsonResponse(data) {
+  return new Response(JSON.stringify(data), {
+    headers: {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*',
+      'Cache-Control': 'public, max-age=30' // 30 seconds cache for super speed
+    }
+  });
+}
