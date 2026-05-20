@@ -25,9 +25,10 @@ export default {
 
         // Fetch more posts than needed for ranking
         const fetchLimit = Math.min(limit * 5, 100); // Fetch 5x to rank better
-        const postQuery = `${SB_URL}/rest/v1/posts?select=id,type,caption,media_url,thumbnail_url,audio_url,aspect_ratio,duration,visibility,like_count,comment_count,share_count,view_count,location_name,created_at,user_id,author:users(id,username,full_name,profile_pic,is_verified,follower_count)&type=eq.${type}&offset=${offset}&limit=${fetchLimit}`;
+        const postQuery = `${SB_URL}/rest/v1/posts?select=id,type,caption,media_url,thumbnail_url,audio_url,aspect_ratio,duration,visibility,like_count,comment_count,share_count,view_count,location_name,created_at,user_id,author:users!posts_user_id_fkey(id,username,full_name,profile_pic,is_verified,follower_count)&type=eq.${type}&offset=${offset}&limit=${fetchLimit}`;
         const postRes = await fetch(postQuery, { headers });
         let posts = await postRes.json();
+        if (!Array.isArray(posts)) return errorResponse(postRes.statusText || posts.message || JSON.stringify(posts), 500);
 
         // Fetch follower list if personalized
         let followingList = [];
@@ -90,9 +91,10 @@ export default {
         
         // Fetch trending with extra posts for ranking
         const fetchLimit = Math.min(limit * 3, 50);
-        const query = `${SB_URL}/rest/v1/posts?select=id,type,caption,media_url,thumbnail_url,audio_url,aspect_ratio,duration,visibility,like_count,comment_count,share_count,view_count,location_name,created_at,user_id,author:users(id,username,full_name,profile_pic,is_verified,follower_count)&type=eq.${type}&order=like_count.desc&limit=${fetchLimit}`;
+        const query = `${SB_URL}/rest/v1/posts?select=id,type,caption,media_url,thumbnail_url,audio_url,aspect_ratio,duration,visibility,like_count,comment_count,share_count,view_count,location_name,created_at,user_id,author:users!posts_user_id_fkey(id,username,full_name,profile_pic,is_verified,follower_count)&type=eq.${type}&order=like_count.desc&limit=${fetchLimit}`;
         const res = await fetch(query, { headers });
         let posts = await res.json();
+        if (!Array.isArray(posts)) return errorResponse(res.statusText || posts.message || JSON.stringify(posts), 500);
         
         // Rank by viral potential
         const rankedPosts = rankPosts(posts);
@@ -105,9 +107,10 @@ export default {
         if (!tag) return jsonResponse([]);
         
         // Search posts containing hashtag in caption
-        const query = `${SB_URL}/rest/v1/posts?select=id,type,caption,media_url,thumbnail_url,like_count,comment_count,view_count,created_at,user_id,author:users(username,full_name,profile_pic,is_verified)&caption=ilike.%23${tag}%&order=like_count.desc&limit=20`;
+        const query = `${SB_URL}/rest/v1/posts?select=id,type,caption,media_url,thumbnail_url,like_count,comment_count,view_count,created_at,user_id,author:users!posts_user_id_fkey(username,full_name,profile_pic,is_verified)&caption=ilike.%23${tag}%&order=like_count.desc&limit=20`;
         const res = await fetch(query, { headers });
         const posts = await res.json();
+        if (!Array.isArray(posts)) return errorResponse(res.statusText || posts.message || JSON.stringify(posts), 500);
         return jsonResponse(posts);
       }
 
@@ -253,9 +256,10 @@ export default {
         const limit = url.searchParams.get('limit') || 20;
         if (!tag) return jsonResponse([]);
         
-        const query = `${SB_URL}/rest/v1/posts?select=id,type,caption,media_url,thumbnail_url,audio_url,like_count,comment_count,view_count,created_at,user_id,author:users(username,full_name,profile_pic,is_verified)&caption=ilike.%23${tag}%&order=like_count.desc&limit=${limit}`;
+        const query = `${SB_URL}/rest/v1/posts?select=id,type,caption,media_url,thumbnail_url,audio_url,like_count,comment_count,view_count,created_at,user_id,author:users!posts_user_id_fkey(username,full_name,profile_pic,is_verified)&caption=ilike.%23${tag}%&order=like_count.desc&limit=${limit}`;
         const res = await fetch(query, { headers });
         const posts = await res.json();
+        if (!Array.isArray(posts)) return errorResponse(res.statusText || posts.message || JSON.stringify(posts), 500);
         return jsonResponse(rankPosts(posts));
       }
 
@@ -278,6 +282,7 @@ export default {
           const postsQuery = `${SB_URL}/rest/v1/posts?user_id=eq.${creatorId}&order=created_at.desc&limit=100`;
           const postsRes = await fetch(postsQuery, { headers });
           const posts = await postsRes.json();
+          if (!Array.isArray(posts)) return errorResponse(postsRes.statusText || posts.message || JSON.stringify(posts), 500);
           
           // Calculate analytics
           const analytics = calculateCreatorAnalytics(user, posts);
