@@ -3,6 +3,7 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const path = url.pathname;
+    const method = request.method;
     
     // Supabase Config (Worker Settings -> Variables mein add karein)
     const SB_URL = env.SUPABASE_URL || "https://frmazzmzyychdfajnslt.supabase.co";
@@ -13,6 +14,20 @@ export default {
       'Authorization': `Bearer ${SB_KEY}`,
       'Content-Type': 'application/json'
     };
+
+    // CORS headers used for preflight and responses
+    const CORS_HEADERS = {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Max-Age': '86400'
+    };
+
+    // Handle preflight
+    if (method === 'OPTIONS') {
+      return new Response(null, { status: 204, headers: CORS_HEADERS });
+    }
 
     try {
       // 1. HOME & REELS FEED WITH SMART RANKING (/api/feed)
@@ -67,6 +82,45 @@ export default {
         
         // Return top N posts
         return jsonResponse(rankedPosts.slice(0, limit));
+      }
+
+      // Support legacy APK path: /api/posts/reels -> mirror /api/feed with type=reel
+      if (path === '/api/posts/reels' && request.method === 'GET') {
+        const limit = parseInt(url.searchParams.get('limit') || '20') || 20;
+        const offset = parseInt(url.searchParams.get('offset') || '0') || 0;
+
+        // Fetch reels specifically
+        const fetchLimit = Math.min(limit * 5, 100);
+        const postQuery = `${SB_URL}/rest/v1/posts?select=id,type,caption,media_url,thumbnail_url,audio_url,aspect_ratio,duration,visibility,like_count,comment_count,share_count,view_count,location_name,created_at,user_id,author:users!posts_user_id_fkey(id,username,full_name,profile_pic,is_verified,follower_count)&type=eq.reel&offset=${offset}&limit=${fetchLimit}`;
+        const postRes = await fetch(postQuery, { headers });
+        let posts = await postRes.json();
+        if (!Array.isArray(posts)) return errorResponse(postRes.statusText || posts.message || JSON.stringify(posts), 500);
+
+        // Apply same ranking
+        let rankedPosts = rankPosts(posts);
+
+        // Format to match APK expected structure
+        const reels = rankedPosts.slice(0, limit).map(p => ({
+          id: p.id,
+          type: p.type,
+          caption: p.caption,
+          media_url: p.media_url,
+          thumbnail_url: p.thumbnail_url,
+          duration: p.duration,
+          aspect_ratio: p.aspect_ratio,
+          like_count: p.like_count,
+          comment_count: p.comment_count,
+          share_count: p.share_count,
+          view_count: p.view_count,
+          engagement_score: p._score,
+          location_name: p.location_name,
+          created_at: p.created_at,
+          author: p.author || {},
+          user_liked: false,
+          user_saved: false
+        }));
+
+        return jsonResponse({ reels, hasMore: reels.length === limit, nextOffset: offset + reels.length });
       }
 
       // 2. RISING STARS (/api/stars) — Top Creators
@@ -312,7 +366,9 @@ function errorResponse(message, status = 400) {
     status: status,
     headers: {
       'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*'
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization'
     }
   });
 }
@@ -500,6 +556,8 @@ function jsonResponse(data) {
     headers: {
       'Content-Type': 'application/json',
       'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       'Cache-Control': 'public, max-age=20' // 20 sec cache for freshness
     }
   });
