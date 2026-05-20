@@ -8,6 +8,13 @@ account_id = "31aa75dfcffb9df514a8b25f3dafca53"
 [vars]
 # Optionally override the default secret here instead of hardcoding in clients
 SECRET_KEY = "TalkSyra_Secret_Key_2024"
+# Supabase settings
+# Put the Supabase URL here (safe to store in repo)
+SUPABASE_URL = "https://frmazzmzyychdfajnslt.supabase.co"
+# SUPABASE_ANON_KEY: Paste your anon key below OR leave empty and set as a secret.
+# Recommended: do NOT commit secret plaintext. Prefer:
+#   wrangler secret put SUPABASE_ANON_KEY
+SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZybWF6em16eXljaGRmYWpuc2x0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE3NzEwMDMsImV4cCI6MjA4NzM0NzAwM30.85x1WBkFX9bdpGw1T5-azJ03WsdzJ1r2EiiScxQnQl0"
 
 [[r2_buckets]]
 binding = "talksyra"
