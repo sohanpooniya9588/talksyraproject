@@ -268,13 +268,13 @@ hashtags (1) ──→ (many) post_hashtags
 
 ### 1. Get Smart Feed (For You Page)
 ```bash
-curl -X GET "https://api.talksyra.com/api/posts/reels?limit=20" \
+curl -X GET "https://shorts.talksyra.app/api/posts/reels?limit=20" \
   -H "Authorization: Bearer USER_TOKEN"
 ```
 
 ### 2. Create Post
 ```bash
-curl -X POST "https://api.talksyra.com/api/posts" \
+curl -X POST "https://shorts.talksyra.app/api/posts" \
   -H "Authorization: Bearer USER_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -287,7 +287,7 @@ curl -X POST "https://api.talksyra.com/api/posts" \
 
 ### 3. Like a Post
 ```bash
-curl -X POST "https://api.talksyra.com/api/likes" \
+curl -X POST "https://shorts.talksyra.app/api/likes" \
   -H "Authorization: Bearer USER_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"post_id": "post-uuid"}'
@@ -295,7 +295,7 @@ curl -X POST "https://api.talksyra.com/api/likes" \
 
 ### 4. Follow User
 ```bash
-curl -X POST "https://api.talksyra.com/api/follows" \
+curl -X POST "https://shorts.talksyra.app/api/follows" \
   -H "Authorization: Bearer USER_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"following_id": "user-uuid"}'
@@ -303,25 +303,25 @@ curl -X POST "https://api.talksyra.com/api/follows" \
 
 ### 5. Get User Profile
 ```bash
-curl -X GET "https://api.talksyra.com/api/users/user-uuid" \
+curl -X GET "https://shorts.talksyra.app/api/users/user-uuid" \
   -H "Authorization: Bearer USER_TOKEN"
 ```
 
 ### 6. Search
 ```bash
-curl -X GET "https://api.talksyra.com/api/search?q=viral&type=all&limit=20" \
+curl -X GET "https://shorts.talksyra.app/api/search?q=viral&type=all&limit=20" \
   -H "Authorization: Bearer USER_TOKEN"
 ```
 
 ### 7. Get Trending Hashtags
 ```bash
-curl -X GET "https://api.talksyra.com/api/trending/hashtags?limit=20" \
+curl -X GET "https://shorts.talksyra.app/api/trending/hashtags?limit=20" \
   -H "Authorization: Bearer USER_TOKEN"
 ```
 
 ### 8. Get User Stories
 ```bash
-curl -X GET "https://api.talksyra.com/api/users/user-uuid/stories" \
+curl -X GET "https://shorts.talksyra.app/api/users/user-uuid/stories" \
   -H "Authorization: Bearer USER_TOKEN"
 ```
 
