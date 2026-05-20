@@ -1,0 +1,495 @@
+{
+  "users": {
+    "tableName": "users",
+    "status": "ok",
+    "columns": [
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "username",
+        "type": "string"
+      },
+      {
+        "name": "full_name",
+        "type": "string"
+      },
+      {
+        "name": "email",
+        "type": "string"
+      },
+      {
+        "name": "profile_pic",
+        "type": "string"
+      },
+      {
+        "name": "cover_pic",
+        "type": "object"
+      },
+      {
+        "name": "bio",
+        "type": "object"
+      },
+      {
+        "name": "website",
+        "type": "object"
+      },
+      {
+        "name": "location",
+        "type": "object"
+      },
+      {
+        "name": "birth_date",
+        "type": "object"
+      },
+      {
+        "name": "is_verified",
+        "type": "boolean"
+      },
+      {
+        "name": "is_pro_member",
+        "type": "boolean"
+      },
+      {
+        "name": "red_coins",
+        "type": "number"
+      },
+      {
+        "name": "green_coins",
+        "type": "number"
+      },
+      {
+        "name": "follower_count",
+        "type": "number"
+      },
+      {
+        "name": "following_count",
+        "type": "number"
+      },
+      {
+        "name": "post_count",
+        "type": "number"
+      },
+      {
+        "name": "status",
+        "type": "string"
+      },
+      {
+        "name": "last_seen",
+        "type": "string"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      },
+      {
+        "name": "is_private",
+        "type": "boolean"
+      },
+      {
+        "name": "password",
+        "type": "object"
+      }
+    ],
+    "sampleData": {
+      "id": "d0dec252-c5d7-4464-8c0a-636e19794358",
+      "username": "moneyyog1212",
+      "full_name": "Money Yog",
+      "email": "moneyyog1212@gmail.com",
+      "profile_pic": "https://lh3.googleusercontent.com/a/ACg8ocLt9nEzNNaeIaQGDL-Y0cfH-8TjT_cBd5FFScZ3zvVlS9T4aw=s96-c",
+      "cover_pic": null,
+      "bio": null,
+      "website": null,
+      "location": null,
+      "birth_date": null,
+      "is_verified": false,
+      "is_pro_member": false,
+      "red_coins": 0,
+      "green_coins": 0,
+      "follower_count": 0,
+      "following_count": 0,
+      "post_count": 0,
+      "status": "active",
+      "last_seen": "2026-05-18T11:51:37.166801+00:00",
+      "created_at": "2026-05-18T11:51:37.166801+00:00",
+      "is_private": false,
+      "password": null
+    }
+  },
+  "posts": {
+    "tableName": "posts",
+    "status": "ok",
+    "columns": [
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "user_id",
+        "type": "string"
+      },
+      {
+        "name": "type",
+        "type": "string"
+      },
+      {
+        "name": "caption",
+        "type": "string"
+      },
+      {
+        "name": "media_url",
+        "type": "string"
+      },
+      {
+        "name": "thumbnail_url",
+        "type": "string"
+      },
+      {
+        "name": "audio_name",
+        "type": "object"
+      },
+      {
+        "name": "audio_url",
+        "type": "object"
+      },
+      {
+        "name": "aspect_ratio",
+        "type": "number"
+      },
+      {
+        "name": "duration",
+        "type": "number"
+      },
+      {
+        "name": "visibility",
+        "type": "string"
+      },
+      {
+        "name": "is_monetized",
+        "type": "boolean"
+      },
+      {
+        "name": "like_count",
+        "type": "number"
+      },
+      {
+        "name": "comment_count",
+        "type": "number"
+      },
+      {
+        "name": "share_count",
+        "type": "number"
+      },
+      {
+        "name": "view_count",
+        "type": "number"
+      },
+      {
+        "name": "location_name",
+        "type": "string"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      }
+    ],
+    "sampleData": {
+      "id": "e01692f9-81c8-4d52-908f-1486f3c5bca2",
+      "user_id": "bd3c5593-1c54-4061-8346-a8d30a31d37c",
+      "type": "post",
+      "caption": "#viral #tranding #reels",
+      "media_url": "https://api.talksyra.app/posts/d53b544f_1779183426022_scaled_1000049439.jpg",
+      "thumbnail_url": "https://api.talksyra.app/posts/d53b544f_1779183426022_scaled_1000049439.jpg",
+      "audio_name": null,
+      "audio_url": null,
+      "aspect_ratio": 1,
+      "duration": 0,
+      "visibility": "public",
+      "is_monetized": false,
+      "like_count": 2,
+      "comment_count": 0,
+      "share_count": 0,
+      "view_count": 0,
+      "location_name": "",
+      "created_at": "2026-05-19T15:07:06.948941+00:00"
+    }
+  },
+  "likes": {
+    "tableName": "likes",
+    "status": "ok",
+    "columns": [
+      {
+        "name": "user_id",
+        "type": "string"
+      },
+      {
+        "name": "post_id",
+        "type": "string"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      }
+    ],
+    "sampleData": {
+      "user_id": "bd3c5593-1c54-4061-8346-a8d30a31d37c",
+      "post_id": "7c9209f5-f899-491c-8d27-a66cb76da019",
+      "created_at": "2026-05-20T05:57:02.721109+00:00"
+    }
+  },
+  "comments": {
+    "tableName": "comments",
+    "status": "ok",
+    "columns": [
+      {
+        "name": "id",
+        "type": "string"
+      },
+      {
+        "name": "post_id",
+        "type": "string"
+      },
+      {
+        "name": "user_id",
+        "type": "string"
+      },
+      {
+        "name": "parent_id",
+        "type": "object"
+      },
+      {
+        "name": "content",
+        "type": "string"
+      },
+      {
+        "name": "created_at",
+        "type": "string"
+      }
+    ],
+    "sampleData": {
+      "id": "a9aa9ce5-ed66-4410-853a-cc02cf938fb3",
+      "post_id": "7c9209f5-f899-491c-8d27-a66cb76da019",
+      "user_id": "bd3c5593-1c54-4061-8346-a8d30a31d37c",
+      "parent_id": null,
+      "content": "waw kya baat hai",
+      "created_at": "2026-05-20T05:56:48.773978+00:00"
+    }
+  },
+  "followers": {
+    "tableName": "followers",
+    "status": "empty",
+    "columns": [],
+    "count": 0
+  },
+  "saves": {
+    "tableName": "saves",
+    "status": "empty",
+    "columns": [],
+    "count": 0
+  },
+  "hashtags": {
+    "tableName": "hashtags",
+    "status": "empty",
+    "columns": [],
+    "count": 0
+  },
+  "stories": {
+    "tableName": "stories",
+    "status": "empty",
+    "columns": [],
+    "count": 0
+  },
+  "story_views": {
+    "tableName": "story_views",
+    "status": "empty",
+    "columns": [],
+    "count": 0
+  },
+  "notifications": {
+    "tableName": "notifications",
+    "status": "empty",
+    "columns": [],
+    "count": 0
+  },
+  "messages": {
+    "tableName": "messages",
+    "status": "empty",
+    "columns": [],
+    "count": 0
+  },
+  "conversations": {
+    "tableName": "conversations",
+    "status": "empty",
+    "columns": [],
+    "count": 0
+  },
+  "conversation_members": {
+    "tableName": "conversation_members",
+    "status": "empty",
+    "columns": [],
+    "count": 0
+  },
+  "blocks": {
+    "tableName": "blocks",
+    "status": "empty",
+    "columns": [],
+    "count": 0
+  },
+  "reports": {
+    "tableName": "reports",
+    "status": "empty",
+    "columns": [],
+    "count": 0
+  },
+  "transactions": {
+    "tableName": "transactions",
+    "status": "empty",
+    "columns": [],
+    "count": 0
+  },
+  "coins_transaction_log": {
+    "tableName": "coins_transaction_log",
+    "status": "empty",
+    "columns": [],
+    "count": 0
+  },
+  "content_moderation_queue": {
+    "tableName": "content_moderation_queue",
+    "status": "empty",
+    "columns": [],
+    "count": 0
+  },
+  "post_hashtags": {
+    "tableName": "post_hashtags",
+    "status": "empty",
+    "columns": [],
+    "count": 0
+  },
+  "post_views_timeline": {
+    "tableName": "post_views_timeline",
+    "status": "empty",
+    "columns": [],
+    "count": 0
+  },
+  "user_activity_log": {
+    "tableName": "user_activity_log",
+    "status": "empty",
+    "columns": [],
+    "count": 0
+  },
+  "user_analytics": {
+    "tableName": "user_analytics",
+    "status": "empty",
+    "columns": [],
+    "count": 0
+  },
+  "user_interests": {
+    "tableName": "user_interests",
+    "status": "empty",
+    "columns": [],
+    "count": 0
+  },
+  "user_preferences": {
+    "tableName": "user_preferences",
+    "status": "empty",
+    "columns": [],
+    "count": 0
+  },
+  "trending_posts": {
+    "tableName": "trending_posts",
+    "status": "empty",
+    "columns": [],
+    "count": 0
+  },
+  "recommendations": {
+    "tableName": "recommendations",
+    "status": "empty",
+    "columns": [],
+    "count": 0
+  },
+  "search_history": {
+    "tableName": "search_history",
+    "status": "empty",
+    "columns": [],
+    "count": 0
+  },
+  "device_info": {
+    "tableName": "device_info",
+    "status": "empty",
+    "columns": [],
+    "count": 0
+  },
+  "engagement_analytics": {
+    "tableName": "engagement_analytics",
+    "status": "empty",
+    "columns": [],
+    "count": 0
+  },
+  "feed_cache": {
+    "tableName": "feed_cache",
+    "status": "empty",
+    "columns": [],
+    "count": 0
+  },
+  "feed_ranking_scores": {
+    "tableName": "feed_ranking_scores",
+    "status": "empty",
+    "columns": [],
+    "count": 0
+  },
+  "reposts": {
+    "tableName": "reposts",
+    "status": "empty",
+    "columns": [],
+    "count": 0
+  },
+  "poll_options": {
+    "tableName": "poll_options",
+    "status": "empty",
+    "columns": [],
+    "count": 0
+  },
+  "poll_votes": {
+    "tableName": "poll_votes",
+    "status": "empty",
+    "columns": [],
+    "count": 0
+  },
+  "polls": {
+    "tableName": "polls",
+    "status": "empty",
+    "columns": [],
+    "count": 0
+  },
+  "ads": {
+    "tableName": "ads",
+    "status": "empty",
+    "columns": [],
+    "count": 0
+  },
+  "calls": {
+    "tableName": "calls",
+    "status": "empty",
+    "columns": [],
+    "count": 0
+  },
+  "group_members": {
+    "tableName": "group_members",
+    "status": "empty",
+    "columns": [],
+    "count": 0
+  },
+  "groups": {
+    "tableName": "groups",
+    "status": "empty",
+    "columns": [],
+    "count": 0
+  },
+  "story_highlights": {
+    "tableName": "story_highlights",
+    "status": "empty",
+    "columns": [],
+    "count": 0
+  }
+}
