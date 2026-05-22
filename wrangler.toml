@@ -1,22 +1,73 @@
 name = "talksyraproject"
 main = "src/worker.js"
 compatibility_date = "2026-05-18"
+compatibility_flags = ["nodejs_compat"]
 
-# Replace the placeholders below with your Cloudflare account values.
+# Cloudflare Account Configuration
 account_id = "31aa75dfcffb9df514a8b25f3dafca53"
 
+# Build Configuration
+[build]
+command = "npm install"
+cwd = "./"
+watch_paths = ["src/**/*.js"]
+
+[build.upload]
+format = "modules"
+main = "./src/worker.js"
+
+# Environment Variables
+[env.production]
+name = "talksyraproject-prod"
+route = "shorts.talksyra.app/*"
+
+[env.staging]
+name = "talksyraproject-staging"
+route = "staging.talksyra.app/*"
+
+# Shared Variables (Safe to commit - no secrets)
 [vars]
-# Optionally override the default secret here instead of hardcoding in clients
+# Application Config
 SECRET_KEY = "TalkSyra_Secret_Key_2024"
-# Supabase settings
-# Put the Supabase URL here (safe to store in repo)
+APP_NAME = "TalkSyra"
+API_VERSION = "2.0"
+
+# Supabase Configuration
+# Database: https://frmazzmzyychdfajnslt.supabase.co
+# Tables: posts (with type: 'post' or 'reel'), users, likes, comments, followers
 SUPABASE_URL = "https://frmazzmzyychdfajnslt.supabase.co"
-# SUPABASE_ANON_KEY: Paste your anon key below OR leave empty and set as a secret.
-# Recommended: do NOT commit secret plaintext. Prefer:
-#   wrangler secret put SUPABASE_ANON_KEY
+SUPABASE_PROJECT_ID = "frmazzmzyychdfajnslt"
+
+# Supabase Anon Key (Read-only, safe to expose in APK)
+# Scope: select on posts, users, followers, likes, comments
 SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZybWF6em16eXljaGRmYWpuc2x0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE3NzEwMDMsImV4cCI6MjA4NzM0NzAwM30.85x1WBkFX9bdpGw1T5-azJ03WsdzJ1r2EiiScxQnQl0"
 
+# Feed Configuration
+FEED_TYPE_POST = "post"
+FEED_TYPE_REEL = "reel"
+DEFAULT_POST_LIMIT = "20"
+DEFAULT_REEL_LIMIT = "10"
+MAX_FEED_LIMIT = "100"
+
+# API Endpoints
+API_FEED_ENDPOINT = "/api/feed"
+API_TRENDING_ENDPOINT = "/api/trending"
+API_STARS_ENDPOINT = "/api/stars"
+
+# R2 Storage Configuration
 [[r2_buckets]]
 binding = "talksyra"
 bucket_name = "talksyra"
-preview_bucket_name = "talksyra"
+preview_bucket_name = "talksyra-preview"
+
+# Service Bindings (if needed for D1 database in future)
+# [[services]]
+# binding = "database"
+# service = "talksyra-db"
+# environment = "production"
+
+# KV Namespace for Caching (optional future enhancement)
+# [[kv_namespaces]]
+# binding = "FEED_CACHE"
+# id = "your_kv_namespace_id"
+# preview_id = "your_kv_preview_id"

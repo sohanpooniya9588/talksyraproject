@@ -1,4 +1,7 @@
 // TalkSyra High-Performance Smart Feed Worker (Instagram-like ranking)
+import { getHomeFeed } from './feeds/postFeed.js';
+import { getReelsFeed } from './feeds/reelsFeed.js';
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -34,93 +37,31 @@ export default {
       if (path === '/api/feed') {
         const type = url.searchParams.get('type') || 'post';
         const userId = url.searchParams.get('userId');
-        const limit = url.searchParams.get('limit') || 20;
-        const offset = url.searchParams.get('offset') || 0;
+        const limit = parseInt(url.searchParams.get('limit')) || 20;
+        const offset = parseInt(url.searchParams.get('offset')) || 0;
         const personalized = url.searchParams.get('personalized') === 'true';
 
-        // Fetch more posts than needed for ranking
-        const fetchLimit = Math.min(limit * 5, 100); // Fetch 5x to rank better
-        const postQuery = `${SB_URL}/rest/v1/posts?select=id,type,caption,media_url,thumbnail_url,audio_url,aspect_ratio,duration,visibility,like_count,comment_count,share_count,view_count,location_name,created_at,user_id,author:users!posts_user_id_fkey(id,username,full_name,profile_pic,is_verified,follower_count)&type=eq.${type}&offset=${offset}&limit=${fetchLimit}`;
-        const postRes = await fetch(postQuery, { headers });
-        let posts = await postRes.json();
-        if (!Array.isArray(posts)) return errorResponse(postRes.statusText || posts.message || JSON.stringify(posts), 500);
-
-        // Fetch follower list if personalized
-        let followingList = [];
-        if (personalized && userId) {
-          const followQuery = `${SB_URL}/rest/v1/followers?select=following_id&follower_id=eq.${userId}`;
-          const followRes = await fetch(followQuery, { headers });
-          const follows = await followRes.json();
-          followingList = follows.map(f => f.following_id);
+        let result;
+        if (type === 'reel') {
+          result = await getReelsFeed(SB_URL, SB_KEY, userId, limit, offset, personalized);
+        } else {
+          result = await getHomeFeed(SB_URL, SB_KEY, userId, limit, offset, personalized);
         }
 
-        // Check Like Status if User is logged in
-        if (userId && posts.length > 0) {
-          const postIds = posts.map(p => p.id);
-          const likesQuery = `${SB_URL}/rest/v1/likes?select=post_id&user_id=eq.${userId}&post_id=in.(${postIds.join(',')})`;
-          const likesRes = await fetch(likesQuery, { headers });
-          const likedData = await likesRes.json();
-          const likedIds = new Set(likedData.map(l => l.post_id));
-
-          posts = posts.map(p => ({
-            ...p,
-            is_liked: likedIds.has(p.id) ? [{ user_id: userId }] : []
-          }));
-        }
-
-        // Apply Smart Ranking Algorithm (Instagram-style)
-        let rankedPosts = rankPosts(posts);
-        
-        // Apply personalization boost if enabled
-        if (personalized && followingList.length > 0) {
-          rankedPosts = rankedPosts.map(p => ({
-            ...p,
-            _personalization_boost: followingList.includes(p.user_id) ? 1.5 : 1.0,
-            _score: p._score * (followingList.includes(p.user_id) ? 1.5 : 1.0)
-          })).sort((a, b) => b._score - a._score);
-        }
-        
-        // Return top N posts
-        return jsonResponse(rankedPosts.slice(0, limit));
+        return result.success 
+          ? jsonResponse(result) 
+          : errorResponse(result.error, 400);
       }
 
-      // Support legacy APK path: /api/posts/reels -> mirror /api/feed with type=reel
+      // Legacy support: /api/posts/reels -> /api/feed?type=reel
       if (path === '/api/posts/reels' && request.method === 'GET') {
         const limit = parseInt(url.searchParams.get('limit') || '20') || 20;
         const offset = parseInt(url.searchParams.get('offset') || '0') || 0;
-
-        // Fetch reels specifically
-        const fetchLimit = Math.min(limit * 5, 100);
-        const postQuery = `${SB_URL}/rest/v1/posts?select=id,type,caption,media_url,thumbnail_url,audio_url,aspect_ratio,duration,visibility,like_count,comment_count,share_count,view_count,location_name,created_at,user_id,author:users!posts_user_id_fkey(id,username,full_name,profile_pic,is_verified,follower_count)&type=eq.reel&offset=${offset}&limit=${fetchLimit}`;
-        const postRes = await fetch(postQuery, { headers });
-        let posts = await postRes.json();
-        if (!Array.isArray(posts)) return errorResponse(postRes.statusText || posts.message || JSON.stringify(posts), 500);
-
-        // Apply same ranking
-        let rankedPosts = rankPosts(posts);
-
-        // Format to match APK expected structure
-        const reels = rankedPosts.slice(0, limit).map(p => ({
-          id: p.id,
-          type: p.type,
-          caption: p.caption,
-          media_url: p.media_url,
-          thumbnail_url: p.thumbnail_url,
-          duration: p.duration,
-          aspect_ratio: p.aspect_ratio,
-          like_count: p.like_count,
-          comment_count: p.comment_count,
-          share_count: p.share_count,
-          view_count: p.view_count,
-          engagement_score: p._score,
-          location_name: p.location_name,
-          created_at: p.created_at,
-          author: p.author || {},
-          user_liked: false,
-          user_saved: false
-        }));
-
-        return jsonResponse({ reels, hasMore: reels.length === limit, nextOffset: offset + reels.length });
+        const userId = url.searchParams.get('userId');
+        const result = await getReelsFeed(SB_URL, SB_KEY, userId, limit, offset, false);
+        return result.success 
+          ? jsonResponse(result) 
+          : errorResponse(result.error, 400);
       }
 
       // 2. RISING STARS (/api/stars) — Top Creators
@@ -141,18 +82,20 @@ export default {
       // 3. TRENDING CONTENT (/api/trending) — Viral Posts
       if (path === '/api/trending') {
         const type = url.searchParams.get('type') || 'post';
-        const limit = url.searchParams.get('limit') || 15;
+        const limit = parseInt(url.searchParams.get('limit')) || 15;
+        const offset = parseInt(url.searchParams.get('offset')) || 0;
         
-        // Fetch trending with extra posts for ranking
-        const fetchLimit = Math.min(limit * 3, 50);
-        const query = `${SB_URL}/rest/v1/posts?select=id,type,caption,media_url,thumbnail_url,audio_url,aspect_ratio,duration,visibility,like_count,comment_count,share_count,view_count,location_name,created_at,user_id,author:users!posts_user_id_fkey(id,username,full_name,profile_pic,is_verified,follower_count)&type=eq.${type}&order=like_count.desc&limit=${fetchLimit}`;
-        const res = await fetch(query, { headers });
-        let posts = await res.json();
-        if (!Array.isArray(posts)) return errorResponse(res.statusText || posts.message || JSON.stringify(posts), 500);
+        // Route to appropriate trending feed
+        let result;
+        if (type === 'reel') {
+          result = await getReelsFeed(SB_URL, SB_KEY, null, limit, offset, false);
+        } else {
+          result = await getHomeFeed(SB_URL, SB_KEY, null, limit, offset, false);
+        }
         
-        // Rank by viral potential
-        const rankedPosts = rankPosts(posts);
-        return jsonResponse(rankedPosts.slice(0, limit));
+        return result.success 
+          ? jsonResponse(result.data) 
+          : errorResponse(result.error, 400);
       }
 
       // 4. SEARCH BY HASHTAG (/api/hashtags/[tag])
@@ -315,7 +258,7 @@ export default {
         const res = await fetch(query, { headers });
         const posts = await res.json();
         if (!Array.isArray(posts)) return errorResponse(res.statusText || posts.message || JSON.stringify(posts), 500);
-        return jsonResponse(rankPosts(posts));
+        return jsonResponse(posts);
       }
 
       // ===== PHASE 2: CREATOR ANALYTICS =====
@@ -501,53 +444,6 @@ function getTierRequirements(currentTier, followers, engagement) {
     followers_needed: tierData.followers ? Math.max(0, tierData.followers - followers) : 0,
     engagement_needed: tierData.engagement ? Math.max(0, tierData.engagement - engagement).toFixed(1) : 0
   };
-}
-
-// Smart ranking algorithm (Instagram-style multi-factor scoring)
-function rankPosts(posts) {
-  const now = Date.now();
-  
-  return posts.map(post => {
-    // 1. ENGAGEMENT SCORE (50% weight)
-    // Comments & shares weighted more (higher user intent)
-    const engagement_score = 
-      (post.like_count || 0) * 1.0 +
-      (post.comment_count || 0) * 2.5 +
-      (post.share_count || 0) * 5.0 +
-      (post.view_count || 0) * 0.05;
-    
-    // 2. FRESHNESS SCORE (20% weight)
-    // Recent posts ranked higher; decay over 7 days
-    const post_age_days = (now - new Date(post.created_at).getTime()) / (1000 * 60 * 60 * 24);
-    const freshness_score = Math.max(0, 1.0 - (post_age_days / 7.0));
-    
-    // 3. CREATOR QUALITY SCORE (15% weight)
-    // Follower count + verification status + posting consistency
-    const author = post.author || {};
-    const follower_boost = Math.log10((author.follower_count || 1) + 1); // Logarithmic scale
-    const verification_boost = (author.is_verified ? 1.5 : 1.0);
-    const creator_quality = follower_boost * verification_boost;
-    
-    // 4. ENGAGEMENT RATE (10% weight)
-    // How fast content is getting engagement
-    const engagement_rate = post_age_days > 0 
-      ? engagement_score / (post_age_days + 1)
-      : engagement_score;
-    
-    // 5. FINAL COMPOSITE SCORE (normalization + weighted sum)
-    const final_score = 
-      (Math.log10(engagement_score + 1) * 0.50) +        // Engagement (50%)
-      (freshness_score * 0.20) +                           // Freshness (20%)
-      (Math.log10(creator_quality + 1) * 0.15) +          // Creator (15%)
-      (Math.log10(engagement_rate + 1) * 0.10) +          // Velocity (10%)
-      (post.visibility === 'public' ? 0.05 : 0);          // Public boost (5%)
-    
-    return {
-      ...post,
-      _score: final_score, // Hidden scoring metadata
-      _engagement_rate: engagement_rate.toFixed(2)
-    };
-  }).sort((a, b) => b._score - a._score); // Sort by score (highest first)
 }
 
 // CORS and Caching helper
