@@ -10,11 +10,8 @@ account_id = "31aa75dfcffb9df514a8b25f3dafca53"
 [build]
 command = "npm install"
 cwd = "./"
-watch_paths = ["src/**/*.js"]
 
-[build.upload]
-format = "modules"
-main = "./src/worker.js"
+
 
 # Environment Variables
 [env.production]
