@@ -15,6 +15,54 @@ TalkSyra Feed System provides two types of content feeds:
 
 ---
 
+## �️ Cloudflare Worker Architecture
+
+**⚠️ IMPORTANT: APK → Worker → Supabase**
+
+APK अब direct Supabase से connect नहीं करता। सभी requests **Cloudflare Worker के through** जाते हैं जो एक proxy की तरह काम करता है।
+
+### Architecture Diagram
+```
+┌─────────────────────────────────────────────────────────┐
+│  APK (Android/iOS)                                      │
+│  - No direct Supabase connection                        │
+│  - All requests go through Worker                       │
+└──────────────────┬──────────────────────────────────────┘
+                   │
+                   │ With Headers:
+                   │ - X-TalkSyra-Secret (Validation)
+                   │ - Authorization: Bearer token
+                   │
+        ┌──────────▼──────────────────────┐
+        │  Cloudflare Worker              │
+        │  (https://shorts.talksyra.app)  │
+        │  - Service Role Key             │
+        │  - Database CRUD                │
+        │  - Auth Management              │
+        │  - Media Upload Handling        │
+        └──────────────┬───────────────────┘
+                       │
+        ┌──────────────▼────────────────────────┐
+        │  Supabase                             │
+        │  - Database (posts, users, etc)       │
+        │  - Storage (media files)              │
+        │  - Auth (JWT tokens)                  │
+        └───────────────────────────────────────┘
+```
+
+### Global Security Headers (Every Request)
+
+**Required Headers for ALL APK requests:**
+```
+X-TalkSyra-Secret: TalkSyra_Secret_Key_2024
+Authorization: Bearer <auth_token>
+Content-Type: application/json
+```
+
+**Exception:** Auth endpoints (login/signup) में `Authorization` header optional है
+
+---
+
 ## 🌐 API Configuration
 
 ### Base URLs
@@ -24,9 +72,11 @@ Media/CDN: https://api.talksyra.app
 Database: https://frmazzmzyychdfajnslt.supabase.co
 ```
 
-### API Keys
+### Security Configuration
 ```
-Supabase Anon Key (Read-Only):
+Secret Key: TalkSyra_Secret_Key_2024 (APK Validation)
+Supabase Service Role Key: (Worker के लिए - NEVER expose करना)
+Supabase Anon Key (Legacy): 
 eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZybWF6em16eXljaGRmYWpuc2x0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE3NzEwMDMsImV4cCI6MjA4NzM0NzAwM30.85x1WBkFX9bdpGw1T5-azJ03WsdzJ1r2EiiScxQnQl0
 ```
 
@@ -155,6 +205,8 @@ GET https://shorts.talksyra.app/api/feed?type=reel&userId=USER_ID&limit=10&offse
 
 ---
 
+---
+
 ## 🔑 Key Differences: Posts vs Reels
 
 | Aspect | Posts | Reels |
@@ -164,6 +216,388 @@ GET https://shorts.talksyra.app/api/feed?type=reel&userId=USER_ID&limit=10&offse
 | **aspect_ratio** | Varies (4:3, 16:9, 1:1) | Fixed 9:16 (vertical) |
 | **duration** | Always null | Video length in seconds |
 | **Ranking** | 50% engagement, 7-day decay | 60% engagement, 3-day decay |
+
+---
+
+## 🔐 Complete Worker Endpoints (All 6 Operations)
+
+### 1. 🔑 Authentication (Login / Signup)
+
+APK को direct Supabase से auth नहीं करना है। Worker यह handle करता है।
+
+**Endpoint**
+```
+POST https://shorts.talksyra.app/api/auth/login
+POST https://shorts.talksyra.app/api/auth/signup
+POST https://shorts.talksyra.app/api/auth/google
+```
+
+**Headers (Optional for Auth)**
+```
+X-TalkSyra-Secret: TalkSyra_Secret_Key_2024
+Content-Type: application/json
+```
+
+**Login Request**
+```json
+{
+  "email": "user@example.com",
+  "password": "securePassword123"
+}
+```
+
+**Signup Request**
+```json
+{
+  "email": "newuser@example.com",
+  "password": "securePassword123",
+  "username": "john_doe",
+  "full_name": "John Doe"
+}
+```
+
+**Google Auth Request**
+```json
+{
+  "id_token": "eyJhbGciOiJSUzI1NiIs...",
+  "username": "john_doe"
+}
+```
+
+**Response (200 OK)**
+```json
+{
+  "success": true,
+  "data": {
+    "auth_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "user_id": "550e8400-e29b-41d4-a716-446655440000",
+    "email": "user@example.com",
+    "username": "john_doe",
+    "profile_pic": null,
+    "created_at": "2026-05-28T10:30:00Z"
+  }
+}
+```
+
+**APK Action:**
+```kotlin
+// Kotlin - Save token to SharedPreferences
+val prefs = context.getSharedPreferences("talksyra_auth", Context.MODE_PRIVATE)
+prefs.edit()
+  .putString("auth_token", response.data.auth_token)
+  .putString("user_id", response.data.user_id)
+  .putString("email", response.data.email)
+  .apply()
+```
+
+```swift
+// Swift - Save token to UserDefaults
+UserDefaults.standard.set(response.data.auth_token, forKey: "authToken")
+UserDefaults.standard.set(response.data.user_id, forKey: "userId")
+UserDefaults.standard.set(response.data.email, forKey: "userEmail")
+```
+
+---
+
+### 2. 🖼️ Media Upload (Images & Reels)
+
+**Endpoint**
+```
+POST https://shorts.talksyra.app/api/upload
+```
+
+**Headers (Required)**
+```
+X-TalkSyra-Secret: TalkSyra_Secret_Key_2024
+Authorization: Bearer <auth_token>
+Content-Type: multipart/form-data
+```
+
+**Payload (Multipart)**
+```
+- file: <Binary File Data>
+- path: "posts" | "profiles" | "reels" | "covers"
+- userId: "550e8400-e29b-41d4-a716-446655440000"
+```
+
+**Response (200 OK)**
+```json
+{
+  "success": true,
+  "data": {
+    "url": "https://shorts.talksyra.app/storage/v1/object/public/media/posts/550e8400-e29b-41d4.jpg",
+    "path": "media/posts/550e8400-e29b-41d4.jpg",
+    "size": 2048576,
+    "mime_type": "image/jpeg"
+  }
+}
+```
+
+**Android Implementation (Kotlin)**
+```kotlin
+val file = File(context.cacheDir, "post_image.jpg")
+val requestBody = file.asRequestBody("image/jpeg".toMediaType())
+val body = MultipartBody.Builder()
+    .setType(MultipartBody.FORM)
+    .addFormDataPart("file", file.name, requestBody)
+    .addFormDataPart("path", "posts")
+    .addFormDataPart("userId", userId)
+    .build()
+
+val request = Request.Builder()
+    .url("https://shorts.talksyra.app/api/upload")
+    .header("X-TalkSyra-Secret", "TalkSyra_Secret_Key_2024")
+    .header("Authorization", "Bearer $authToken")
+    .post(body)
+    .build()
+
+val response = httpClient.newCall(request).execute()
+val uploadedUrl = response.json().getJSONObject("data").getString("url")
+```
+
+**iOS Implementation (Swift)**
+```swift
+func uploadImage(_ imageData: Data, path: String) {
+    let url = URL(string: "https://shorts.talksyra.app/api/upload")!
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.setValue("TalkSyra_Secret_Key_2024", forHTTPHeaderField: "X-TalkSyra-Secret")
+    request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+    
+    let boundary = "Boundary-\(UUID().uuidString)"
+    request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+    
+    var body = Data()
+    
+    // Add file
+    body.append("--\(boundary)\r\n")
+    body.append("Content-Disposition: form-data; name=\"file\"; filename=\"image.jpg\"\r\n")
+    body.append("Content-Type: image/jpeg\r\n\r\n")
+    body.append(imageData)
+    body.append("\r\n")
+    
+    // Add path
+    body.append("--\(boundary)\r\n")
+    body.append("Content-Disposition: form-data; name=\"path\"\r\n\r\n")
+    body.append(path)
+    body.append("\r\n--\(boundary)--\r\n")
+    
+    request.httpBody = body
+    
+    URLSession.shared.dataTask(with: request) { data, _, _ in
+        if let data = data,
+           let json = try? JSONDecoder().decode(UploadResponse.self, from: data) {
+            print("Upload URL: \(json.data.url)")
+        }
+    }.resume()
+}
+```
+
+---
+
+### 3. 📝 Post & Reels Creation
+
+**Endpoint**
+```
+POST https://shorts.talksyra.app/api/posts/create
+```
+
+**Headers (Required)**
+```
+X-TalkSyra-Secret: TalkSyra_Secret_Key_2024
+Authorization: Bearer <auth_token>
+Content-Type: application/json
+```
+
+**Request Payload**
+```json
+{
+  "userId": "550e8400-e29b-41d4-a716-446655440000",
+  "caption": "Amazing sunset! 🌅 #travel",
+  "media_url": "https://shorts.talksyra.app/storage/v1/object/public/media/posts/550e8400.jpg",
+  "type": "post",
+  "aspect_ratio": "4/3",
+  "visibility": "public",
+  "location_name": "Goa, India",
+  "audio_url": null
+}
+```
+
+**For Reels (type=reel):**
+```json
+{
+  "userId": "550e8400-e29b-41d4-a716-446655440000",
+  "caption": "Learn JavaScript in 60 seconds 👨‍💻 #coding",
+  "media_url": "https://shorts.talksyra.app/storage/v1/object/public/media/reels/550e8400.mp4",
+  "audio_url": "https://shorts.talksyra.app/audio/music-123.mp3",
+  "type": "reel",
+  "aspect_ratio": "9/16",
+  "duration": 60,
+  "visibility": "public"
+}
+```
+
+**Response (200 OK)**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "post-550e8400-e29b-41d4",
+    "type": "post",
+    "caption": "Amazing sunset! 🌅 #travel",
+    "media_url": "https://shorts.talksyra.app/storage/v1/object/public/media/posts/550e8400.jpg",
+    "created_at": "2026-05-28T10:30:00Z"
+  }
+}
+```
+
+---
+
+### 4. 👤 Profile & Cover Update
+
+**Endpoint**
+```
+POST https://shorts.talksyra.app/api/users/update
+```
+
+**Headers (Required)**
+```
+X-TalkSyra-Secret: TalkSyra_Secret_Key_2024
+Authorization: Bearer <auth_token>
+Content-Type: application/json
+```
+
+**Request Payload**
+```json
+{
+  "userId": "550e8400-e29b-41d4-a716-446655440000",
+  "data": {
+    "username": "new_username",
+    "full_name": "John Doe Updated",
+    "bio": "Travel lover | Photographer 📸",
+    "profile_pic": "https://shorts.talksyra.app/storage/v1/object/public/media/profiles/550e8400.jpg",
+    "cover_pic": "https://shorts.talksyra.app/storage/v1/object/public/media/covers/550e8400.jpg"
+  }
+}
+```
+
+**Response (200 OK)**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "username": "new_username",
+    "full_name": "John Doe Updated",
+    "bio": "Travel lover | Photographer 📸",
+    "profile_pic": "https://shorts.talksyra.app/storage/v1/object/public/media/profiles/550e8400.jpg",
+    "cover_pic": "https://shorts.talksyra.app/storage/v1/object/public/media/covers/550e8400.jpg"
+  }
+}
+```
+
+---
+
+### 5. ❤️ Social Actions (Like, Comment, Follow)
+
+#### Toggle Like
+```
+POST https://shorts.talksyra.app/api/likes/toggle
+```
+
+**Request:**
+```json
+{
+  "postId": "post-550e8400-e29b-41d4",
+  "userId": "550e8400-e29b-41d4-a716-446655440000",
+  "isCurrentlyLiked": false
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "liked": true,
+    "like_count": 1201
+  }
+}
+```
+
+#### Add Comment
+```
+POST https://shorts.talksyra.app/api/comments/add
+```
+
+**Request:**
+```json
+{
+  "postId": "post-550e8400-e29b-41d4",
+  "userId": "550e8400-e29b-41d4-a716-446655440000",
+  "content": "Amazing! 🔥",
+  "parentCommentId": null
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "comment-550e8400",
+    "postId": "post-550e8400-e29b-41d4",
+    "userId": "550e8400-e29b-41d4-a716-446655440000",
+    "content": "Amazing! 🔥",
+    "created_at": "2026-05-28T10:30:00Z",
+    "author": {
+      "username": "john_doe",
+      "profile_pic": "..."
+    }
+  }
+}
+```
+
+#### Toggle Follow
+```
+POST https://shorts.talksyra.app/api/users/follow
+```
+
+**Request:**
+```json
+{
+  "followerId": "550e8400-e29b-41d4-a716-446655440000",
+  "followingId": "550e8400-e29b-41d4-a716-446655440001",
+  "isFollowing": false
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "following": true,
+    "follower_count": 501
+  }
+}
+```
+
+---
+
+### 6. 📡 Feed Retrieval (Updated with Headers)
+
+**Endpoint**
+```
+GET https://shorts.talksyra.app/api/feed?type=post&userId=USER_ID&limit=20&offset=0
+```
+
+**Headers (Required)**
+```
+X-TalkSyra-Secret: TalkSyra_Secret_Key_2024
+Authorization: Bearer <auth_token>
+Content-Type: application/json
+```
 
 ---
 
@@ -336,13 +770,61 @@ interface TalkSyraApi {
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import com.google.gson.Gson
+import okhttp3.OkHttpClient
+import okhttp3.Interceptor
+import okhttp3.logging.HttpLoggingInterceptor
+import android.content.Context
 
 object RetrofitClient {
     private const val BASE_URL = "https://shorts.talksyra.app"
+    private const val SECRET_KEY = "TalkSyra_Secret_Key_2024"
+    
+    private lateinit var appContext: Context
+    
+    fun initialize(context: Context) {
+        appContext = context.applicationContext
+    }
+    
+    private fun getAuthToken(): String? {
+        val prefs = appContext.getSharedPreferences("talksyra_auth", Context.MODE_PRIVATE)
+        return prefs.getString("auth_token", null)
+    }
+    
+    // OkHttp Interceptor: Add security headers to every request
+    private class HeaderInterceptor : Interceptor {
+        override fun intercept(chain: Interceptor.Chain): okhttp3.Response {
+            val originalRequest = chain.request()
+            val authToken = getAuthToken()
+            
+            // Build new request with headers
+            val requestBuilder = originalRequest.newBuilder()
+                .header("X-TalkSyra-Secret", SECRET_KEY)
+                .header("Content-Type", "application/json")
+            
+            // Add auth token if available (not for login/signup)
+            if (!originalRequest.url.pathSegments.contains("login") && 
+                !originalRequest.url.pathSegments.contains("signup")) {
+                if (authToken != null) {
+                    requestBuilder.header("Authorization", "Bearer $authToken")
+                }
+            }
+            
+            return chain.proceed(requestBuilder.build())
+        }
+    }
+    
+    // OkHttp Client with interceptor
+    private val httpClient = OkHttpClient.Builder()
+        .addInterceptor(HeaderInterceptor())
+        .addInterceptor(HttpLoggingInterceptor().apply {
+            level = HttpLoggingInterceptor.Level.BODY
+        })
+        .build()
 
     val api: TalkSyraApi by lazy {
         Retrofit.Builder()
             .baseUrl(BASE_URL)
+            .client(httpClient)
             .addConverterFactory(GsonConverterFactory.create(Gson()))
             .build()
             .create(TalkSyraApi::class.java)

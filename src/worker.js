@@ -2,29 +2,37 @@
 import { getHomeFeed } from './feeds/postFeed.js';
 import { getReelsFeed } from './feeds/reelsFeed.js';
 
+const SECRET_KEY = 'TalkSyra_Secret_Key_2024';
+const CORS_HEADERS = {
+  'Content-Type': 'application/json',
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-TalkSyra-Secret',
+  'Access-Control-Max-Age': '86400'
+};
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const path = url.pathname;
     const method = request.method;
     
-    // Supabase Config (Worker Settings -> Variables mein add karein)
+    // Supabase Config
     const SB_URL = env.SUPABASE_URL || "https://frmazzmzyychdfajnslt.supabase.co";
-    const SB_KEY = env.SUPABASE_ANON_KEY; 
-
+    const SB_KEY = env.SUPABASE_ANON_KEY;
+    const SB_SERVICE_KEY = env.SUPABASE_SERVICE_KEY; // For admin operations
+    
     const headers = {
       'apikey': SB_KEY,
       'Authorization': `Bearer ${SB_KEY}`,
       'Content-Type': 'application/json'
     };
 
-    // CORS headers used for preflight and responses
-    const CORS_HEADERS = {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      'Access-Control-Max-Age': '86400'
+    // Service role headers (for admin operations)
+    const serviceHeaders = {
+      'apikey': SB_SERVICE_KEY || SB_KEY,
+      'Authorization': `Bearer ${SB_SERVICE_KEY || SB_KEY}`,
+      'Content-Type': 'application/json'
     };
 
     // Handle preflight
@@ -33,7 +41,421 @@ export default {
     }
 
     try {
-      // 1. HOME & REELS FEED WITH SMART RANKING (/api/feed)
+      // ===== APK SECURITY VALIDATION =====
+      // Validate X-TalkSyra-Secret header for all non-auth requests
+      const appSecret = request.headers.get('X-TalkSyra-Secret');
+      const authToken = request.headers.get('Authorization')?.replace('Bearer ', '');
+      
+      const isAuthEndpoint = path.startsWith('/api/auth/');
+      
+      if (!isAuthEndpoint && appSecret !== SECRET_KEY) {
+        return jsonResponse({ success: false, error: 'Invalid X-TalkSyra-Secret header', code: 'INVALID_SECRET' }, 401);
+      }
+      if (!isAuthEndpoint && appSecret !== SECRET_KEY) {
+        return jsonResponse({ success: false, error: 'Invalid X-TalkSyra-Secret header', code: 'INVALID_SECRET' }, 401);
+      }
+
+      // ===== APK OPERATIONS (6 Core Endpoints) =====
+
+      // 1. AUTHENTICATION (/api/auth/login, /api/auth/signup, /api/auth/google)
+      if (path === '/api/auth/login' && method === 'POST') {
+        const body = await request.json();
+        const { email, password } = body;
+        
+        if (!email || !password) {
+          return jsonResponse({ success: false, error: 'Missing email or password', code: 'INVALID_INPUT' }, 400);
+        }
+
+        try {
+          // Call Supabase Auth API
+          const authRes = await fetch(`${SB_URL}/auth/v1/token?grant_type=password`, {
+            method: 'POST',
+            headers: { 'apikey': SB_KEY, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password })
+          });
+
+          const authData = await authRes.json();
+          
+          if (!authRes.ok) {
+            return jsonResponse({ success: false, error: 'Invalid credentials', code: 'AUTH_FAILED' }, 401);
+          }
+
+          // Fetch user data
+          const userRes = await fetch(`${SB_URL}/rest/v1/users?email=eq.${email}`, { headers });
+          const users = await userRes.json();
+          const user = users[0];
+
+          return jsonResponse({
+            success: true,
+            data: {
+              auth_token: authData.access_token,
+              user_id: authData.user.id,
+              email: user.email,
+              username: user.username,
+              profile_pic: user.profile_pic
+            }
+          });
+        } catch (err) {
+          return jsonResponse({ success: false, error: err.message, code: 'SERVER_ERROR' }, 500);
+        }
+      }
+
+      if (path === '/api/auth/signup' && method === 'POST') {
+        const body = await request.json();
+        const { email, password, username, full_name } = body;
+        
+        if (!email || !password || !username) {
+          return jsonResponse({ success: false, error: 'Missing required fields', code: 'INVALID_INPUT' }, 400);
+        }
+
+        try {
+          // Create Supabase auth user
+          const signupRes = await fetch(`${SB_URL}/auth/v1/signup`, {
+            method: 'POST',
+            headers: { 'apikey': SB_KEY, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password })
+          });
+
+          const signupData = await signupRes.json();
+          
+          if (!signupRes.ok) {
+            return jsonResponse({ success: false, error: signupData.message || 'Signup failed', code: 'SIGNUP_FAILED' }, 400);
+          }
+
+          // Insert user into users table
+          const userId = signupData.user.id;
+          await fetch(`${SB_URL}/rest/v1/users`, {
+            method: 'POST',
+            headers: serviceHeaders,
+            body: JSON.stringify({
+              id: userId,
+              email,
+              username,
+              full_name: full_name || username,
+              created_at: new Date().toISOString()
+            })
+          });
+
+          return jsonResponse({
+            success: true,
+            data: {
+              auth_token: signupData.session.access_token,
+              user_id: userId,
+              email,
+              username
+            }
+          });
+        } catch (err) {
+          return jsonResponse({ success: false, error: err.message, code: 'SERVER_ERROR' }, 500);
+        }
+      }
+
+      // 2. MEDIA UPLOAD (/api/upload)
+      if (path === '/api/upload' && method === 'POST') {
+        if (!authToken) {
+          return jsonResponse({ success: false, error: 'Missing Authorization header', code: 'MISSING_AUTH' }, 401);
+        }
+
+        try {
+          const formData = await request.formData();
+          const file = formData.get('file');
+          const uploadPath = formData.get('path') || 'posts';
+          const userId = formData.get('userId');
+
+          if (!file || !userId) {
+            return jsonResponse({ success: false, error: 'Missing file or userId', code: 'INVALID_INPUT' }, 400);
+          }
+
+          // Generate unique filename
+          const timestamp = Date.now();
+          const fileName = `${userId}-${timestamp}-${file.name}`;
+          const filePath = `media/${uploadPath}/${fileName}`;
+
+          // Upload to Supabase Storage
+          const uploadRes = await fetch(
+            `${SB_URL}/storage/v1/object/public/${filePath}`,
+            {
+              method: 'POST',
+              headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${authToken}` },
+              body: await file.arrayBuffer()
+            }
+          );
+
+          if (!uploadRes.ok) {
+            return jsonResponse({ success: false, error: 'Upload failed', code: 'UPLOAD_FAILED' }, 400);
+          }
+
+          const url = `${SB_URL}/storage/v1/object/public/${filePath}`;
+
+          return jsonResponse({
+            success: true,
+            data: {
+              url,
+              path: filePath,
+              size: file.size,
+              mime_type: file.type
+            }
+          });
+        } catch (err) {
+          return jsonResponse({ success: false, error: err.message, code: 'SERVER_ERROR' }, 500);
+        }
+      }
+
+      // 3. CREATE POST / REEL (/api/posts/create)
+      if (path === '/api/posts/create' && method === 'POST') {
+        if (!authToken) {
+          return jsonResponse({ success: false, error: 'Missing Authorization header', code: 'MISSING_AUTH' }, 401);
+        }
+
+        const body = await request.json();
+        const { userId, caption, media_url, type, aspect_ratio, visibility, location_name, audio_url, duration } = body;
+
+        if (!userId || !media_url || !type) {
+          return jsonResponse({ success: false, error: 'Missing required fields', code: 'INVALID_INPUT' }, 400);
+        }
+
+        try {
+          const postId = `${type}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+          
+          const postData = {
+            id: postId,
+            user_id: userId,
+            type,
+            caption: caption || '',
+            media_url,
+            aspect_ratio: aspect_ratio || (type === 'reel' ? '9/16' : '4/3'),
+            visibility: visibility || 'public',
+            location_name: location_name || null,
+            audio_url: audio_url || null,
+            duration: duration || null,
+            score: 0,
+            like_count: 0,
+            comment_count: 0,
+            share_count: 0,
+            view_count: 0,
+            created_at: new Date().toISOString()
+          };
+
+          const createRes = await fetch(`${SB_URL}/rest/v1/posts`, {
+            method: 'POST',
+            headers: serviceHeaders,
+            body: JSON.stringify(postData)
+          });
+
+          if (!createRes.ok) {
+            return jsonResponse({ success: false, error: 'Failed to create post', code: 'CREATE_FAILED' }, 400);
+          }
+
+          return jsonResponse({
+            success: true,
+            data: {
+              id: postId,
+              type,
+              caption,
+              media_url,
+              created_at: postData.created_at
+            }
+          });
+        } catch (err) {
+          return jsonResponse({ success: false, error: err.message, code: 'SERVER_ERROR' }, 500);
+        }
+      }
+
+      // 4. UPDATE PROFILE (/api/users/update)
+      if (path === '/api/users/update' && method === 'POST') {
+        if (!authToken) {
+          return jsonResponse({ success: false, error: 'Missing Authorization header', code: 'MISSING_AUTH' }, 401);
+        }
+
+        const body = await request.json();
+        const { userId, data } = body;
+
+        if (!userId || !data) {
+          return jsonResponse({ success: false, error: 'Missing userId or data', code: 'INVALID_INPUT' }, 400);
+        }
+
+        try {
+          const updateRes = await fetch(
+            `${SB_URL}/rest/v1/users?id=eq.${userId}`,
+            {
+              method: 'PATCH',
+              headers: { ...serviceHeaders, 'Prefer': 'return=representation' },
+              body: JSON.stringify({
+                ...data,
+                updated_at: new Date().toISOString()
+              })
+            }
+          );
+
+          const updated = await updateRes.json();
+
+          if (!updateRes.ok || !updated[0]) {
+            return jsonResponse({ success: false, error: 'Failed to update profile', code: 'UPDATE_FAILED' }, 400);
+          }
+
+          return jsonResponse({
+            success: true,
+            data: updated[0]
+          });
+        } catch (err) {
+          return jsonResponse({ success: false, error: err.message, code: 'SERVER_ERROR' }, 500);
+        }
+      }
+
+      // 5. SOCIAL ACTIONS (/api/likes/toggle, /api/comments/add, /api/users/follow)
+      if (path === '/api/likes/toggle' && method === 'POST') {
+        if (!authToken) {
+          return jsonResponse({ success: false, error: 'Missing Authorization header', code: 'MISSING_AUTH' }, 401);
+        }
+
+        const body = await request.json();
+        const { postId, userId, isCurrentlyLiked } = body;
+
+        if (!postId || !userId) {
+          return jsonResponse({ success: false, error: 'Missing postId or userId', code: 'INVALID_INPUT' }, 400);
+        }
+
+        try {
+          if (isCurrentlyLiked) {
+            // Delete like
+            await fetch(
+              `${SB_URL}/rest/v1/likes?post_id=eq.${postId}&user_id=eq.${userId}`,
+              { method: 'DELETE', headers: { ...serviceHeaders, 'Prefer': 'return=minimal' } }
+            );
+          } else {
+            // Insert like
+            const likeId = `like-${postId}-${userId}`;
+            await fetch(`${SB_URL}/rest/v1/likes`, {
+              method: 'POST',
+              headers: { ...serviceHeaders, 'Prefer': 'return=minimal' },
+              body: JSON.stringify({ id: likeId, post_id: postId, user_id: userId })
+            });
+          }
+
+          // Get updated like count
+          const countRes = await fetch(`${SB_URL}/rest/v1/likes?post_id=eq.${postId}&select=count()`, {
+            headers: { ...serviceHeaders, 'Prefer': 'count=exact' }
+          });
+
+          const likeCount = parseInt(countRes.headers.get('content-range')?.split('/')[1] || '0');
+
+          return jsonResponse({
+            success: true,
+            data: {
+              liked: !isCurrentlyLiked,
+              like_count: likeCount
+            }
+          });
+        } catch (err) {
+          return jsonResponse({ success: false, error: err.message, code: 'SERVER_ERROR' }, 500);
+        }
+      }
+
+      if (path === '/api/comments/add' && method === 'POST') {
+        if (!authToken) {
+          return jsonResponse({ success: false, error: 'Missing Authorization header', code: 'MISSING_AUTH' }, 401);
+        }
+
+        const body = await request.json();
+        const { postId, userId, content, parentCommentId } = body;
+
+        if (!postId || !userId || !content) {
+          return jsonResponse({ success: false, error: 'Missing required fields', code: 'INVALID_INPUT' }, 400);
+        }
+
+        try {
+          const commentId = `comment-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+          const commentRes = await fetch(`${SB_URL}/rest/v1/comments`, {
+            method: 'POST',
+            headers: { ...serviceHeaders, 'Prefer': 'return=representation' },
+            body: JSON.stringify({
+              id: commentId,
+              post_id: postId,
+              user_id: userId,
+              content,
+              parent_comment_id: parentCommentId || null,
+              created_at: new Date().toISOString()
+            })
+          });
+
+          const comment = (await commentRes.json())[0];
+
+          // Get author info
+          const userRes = await fetch(`${SB_URL}/rest/v1/users?id=eq.${userId}`, { headers });
+          const author = (await userRes.json())[0];
+
+          return jsonResponse({
+            success: true,
+            data: {
+              id: commentId,
+              postId,
+              content,
+              created_at: comment.created_at,
+              author: {
+                username: author.username,
+                profile_pic: author.profile_pic
+              }
+            }
+          });
+        } catch (err) {
+          return jsonResponse({ success: false, error: err.message, code: 'SERVER_ERROR' }, 500);
+        }
+      }
+
+      if (path === '/api/users/follow' && method === 'POST') {
+        if (!authToken) {
+          return jsonResponse({ success: false, error: 'Missing Authorization header', code: 'MISSING_AUTH' }, 401);
+        }
+
+        const body = await request.json();
+        const { followerId, followingId, isFollowing } = body;
+
+        if (!followerId || !followingId) {
+          return jsonResponse({ success: false, error: 'Missing followerId or followingId', code: 'INVALID_INPUT' }, 400);
+        }
+
+        if (followerId === followingId) {
+          return jsonResponse({ success: false, error: 'Cannot follow yourself', code: 'INVALID_ACTION' }, 400);
+        }
+
+        try {
+          if (isFollowing) {
+            // Delete follow
+            await fetch(
+              `${SB_URL}/rest/v1/followers?follower_id=eq.${followerId}&following_id=eq.${followingId}`,
+              { method: 'DELETE', headers: { ...serviceHeaders, 'Prefer': 'return=minimal' } }
+            );
+          } else {
+            // Insert follow
+            const followId = `follow-${followerId}-${followingId}`;
+            await fetch(`${SB_URL}/rest/v1/followers`, {
+              method: 'POST',
+              headers: { ...serviceHeaders, 'Prefer': 'return=minimal' },
+              body: JSON.stringify({ id: followId, follower_id: followerId, following_id: followingId })
+            });
+          }
+
+          // Get updated follower count
+          const countRes = await fetch(`${SB_URL}/rest/v1/followers?following_id=eq.${followingId}&select=count()`, {
+            headers: { ...serviceHeaders, 'Prefer': 'count=exact' }
+          });
+
+          const followerCount = parseInt(countRes.headers.get('content-range')?.split('/')[1] || '0');
+
+          return jsonResponse({
+            success: true,
+            data: {
+              following: !isFollowing,
+              follower_count: followerCount
+            }
+          });
+        } catch (err) {
+          return jsonResponse({ success: false, error: err.message, code: 'SERVER_ERROR' }, 500);
+        }
+      }
+
+      // 6. FEED RETRIEVAL (/api/feed) - Updated with header validation
       if (path === '/api/feed') {
         const type = url.searchParams.get('type') || 'post';
         const userId = url.searchParams.get('userId');
@@ -298,21 +720,24 @@ export default {
       return new Response("TalkSyra Worker API is running", { status: 200 });
 
     } catch (err) {
-      return new Response(JSON.stringify({ error: err.message }), { status: 500 });
+      return new Response(JSON.stringify({ success: false, error: err.message, code: 'SERVER_ERROR' }), { status: 500, headers: CORS_HEADERS });
     }
   }
 };
 
+// Response helpers
+function jsonResponse(data, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status: status,
+    headers: CORS_HEADERS
+  });
+}
+
 // Error response helper
 function errorResponse(message, status = 400) {
-  return new Response(JSON.stringify({ error: message }), {
+  return new Response(JSON.stringify({ success: false, error: message }), {
     status: status,
-    headers: {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization'
-    }
+    headers: CORS_HEADERS
   });
 }
 
